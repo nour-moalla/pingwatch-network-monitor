@@ -1,0 +1,8 @@
+# Namespace = logical folder for your resources
+# Isolates PingWatch resources from other apps
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pingwatch
+  labels:
+    app: pingwatch

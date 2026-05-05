@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+
+  # ============================================
+  # PostgreSQL Database
+  # ============================================
+  db:
+    image: postgres:15-alpine
+    container_name: pingwatch-db
+
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+
+    # Persist database data between container restarts
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    networks:
+      - pingwatch-network
+
+    # Health check — wait until PostgreSQL accepts connections
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ============================================
+  # PingWatch Spring Boot Application
+  # ============================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pingwatch-app
+
+    ports:
+      - "8080:8080"
+
+    environment:
+      # 'db' = service name, Docker resolves it automatically
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${DB_NAME}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+
+    # Only start after db is healthy
+    depends_on:
+      db:
+        condition: service_healthy
+
+    networks:
+      - pingwatch-network
+
+    restart: unless-stopped
+
+# Named volumes — data persists between restarts
+volumes:
+  postgres_data:
+
+# Isolated network — containers talk by service name
+networks:
+  pingwatch-network:
+    driver: bridge

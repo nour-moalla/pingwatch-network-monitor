@@ -1,0 +1,15 @@
+# Change 'version: blue' to 'version: green' to switch traffic
+apiVersion: v1
+kind: Service
+metadata:
+  name: pingwatch-service
+  namespace: pingwatch
+spec:
+  selector:
+    app: pingwatch
+    version: blue     # ← THIS LINE controls traffic
+  ports:
+  - port: 8080
+    targetPort: 8080
+    nodePort: 30080
+  type: NodePort

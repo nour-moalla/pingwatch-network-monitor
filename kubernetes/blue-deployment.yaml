@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pingwatch-blue
+  namespace: pingwatch
+  labels:
+    app: pingwatch
+    version: blue
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: pingwatch
+      version: blue
+  template:
+    metadata:
+      labels:
+        app: pingwatch
+        version: blue
+    spec:
+      containers:
+      - name: pingwatch
+        image: pingwatch:v1
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8080
+        env:
+        - name: SPRING_DATASOURCE_URL
+          value: "jdbc:postgresql://postgres-service:5432/pingwatch"
+        - name: SPRING_DATASOURCE_USERNAME
+          valueFrom:
+            configMapKeyRef:
+              name: pingwatch-config
+              key: DB_USER
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: pingwatch-secret
+              key: db-password
+        - name: SPRING_JPA_HIBERNATE_DDL_AUTO
+          value: "update"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 60
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 90
+          periodSeconds: 15

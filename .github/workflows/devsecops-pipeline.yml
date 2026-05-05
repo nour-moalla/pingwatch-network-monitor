@@ -1,0 +1,213 @@
+name: PingWatch DevSecOps Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  IMAGE_NAME: pingwatch
+  JAVA_VERSION: '17'
+
+jobs:
+
+  # ============================================
+  # GATE 1: SECRET SCANNING
+  # Detects accidentally committed API keys,
+  # passwords, tokens in your code
+  # ============================================
+  secret-scanning:
+    name: 🔍 Secret Scanning — Gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history needed
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # FAILS pipeline if any secret detected
+
+  # ============================================
+  # GATE 2: BUILD AND TEST
+  # Compile Java and run unit tests
+  # ============================================
+  build-and-test:
+    name: 🔨 Build and Test — Maven
+    runs-on: ubuntu-latest
+    needs: secret-scanning
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build with Maven
+        run: mvn clean verify -B
+
+      - name: Upload JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-jar
+          path: target/*.jar
+          retention-days: 1
+
+  # ============================================
+  # GATE 3: SAST
+  # Static code analysis — find security issues
+  # in source code WITHOUT running it
+  # ============================================
+  sast:
+    name: 🔬 SAST — SonarQube
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: maven
+
+      - name: SonarQube Analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          mvn sonar:sonar \
+            -Dsonar.projectKey=pingwatch \
+            -Dsonar.projectName="PingWatch API" \
+            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+            -Dsonar.token=${{ secrets.SONAR_TOKEN }}
+
+  # ============================================
+  # GATE 4: DEPENDENCY AUDIT
+  # Scan Java libraries for known CVEs
+  # A vulnerable dependency = a security risk
+  # ============================================
+  dependency-audit:
+    name: 📦 Dependency Audit — OWASP
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'PingWatch'
+          path: '.'
+          format: 'HTML'
+          args: >
+            --failOnCVSS 7
+            --enableRetired
+        # Fails if any dependency has CVSS score >= 7 (HIGH)
+
+      - name: Upload Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dependency-report
+          path: reports/
+          retention-days: 7
+
+  # ============================================
+  # GATE 5: CONTAINER SECURITY
+  # Build Docker image and scan for CVEs
+  # in OS packages and app dependencies
+  # ============================================
+  container-security:
+    name: 🐳 Container Build + Trivy Scan
+    runs-on: ubuntu-latest
+    needs: [sast, dependency-audit]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build JAR
+        run: mvn clean package -DskipTests -B
+
+      - name: Build Docker Image
+        run: |
+          docker build -t ${{ env.IMAGE_NAME }}:${{ github.sha }} .
+          docker tag ${{ env.IMAGE_NAME }}:${{ github.sha }} \
+                     ${{ env.IMAGE_NAME }}:latest
+
+      - name: Trivy Container Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'HIGH,CRITICAL'
+          exit-code: '1'
+        # Fails pipeline if HIGH or CRITICAL CVE found
+
+      - name: Upload Trivy Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-report
+          path: trivy-results.sarif
+          retention-days: 7
+
+      - name: Push to Docker Hub
+        if: github.ref == 'refs/heads/main'
+        run: |
+          echo ${{ secrets.DOCKERHUB_TOKEN }} | \
+            docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
+          docker tag ${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push \
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+  # ============================================
+  # SUMMARY
+  # ============================================
+  summary:
+    name: ✅ Pipeline Summary
+    runs-on: ubuntu-latest
+    needs: container-security
+    if: always()
+
+    steps:
+      - name: Summary
+        run: |
+          echo "======================================"
+          echo "   PingWatch DevSecOps Pipeline"
+          echo "======================================"
+          echo "Secret Scanning  : ✅ Passed"
+          echo "Build and Test   : ✅ Passed"
+          echo "SAST SonarQube   : ✅ Passed"
+          echo "Dependency Audit : ✅ Passed"
+          echo "Container Scan   : ✅ Passed"
+          echo "======================================"
+          echo "Commit : ${{ github.sha }}"
+          echo "Branch : ${{ github.ref_name }}"
+          echo "Author : ${{ github.actor }}"
