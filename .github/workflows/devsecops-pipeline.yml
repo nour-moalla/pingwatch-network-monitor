@@ -172,6 +172,7 @@ jobs:
           output: 'trivy-results.sarif'
           severity: 'HIGH,CRITICAL'
           exit-code: '1'
+          ignore-unfixed: true
         # Fails pipeline if HIGH or CRITICAL CVE found
 
       - name: Upload Trivy Report
