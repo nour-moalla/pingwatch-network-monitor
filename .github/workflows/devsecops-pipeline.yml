@@ -85,6 +85,9 @@ jobs:
           distribution: 'temurin'
           cache: maven
 
+      - name: Build for Sonar
+        run: mvn clean package -DskipTests -B
+
       - name: SonarQube Analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -95,7 +98,8 @@ jobs:
             -Dsonar.projectName="PingWatch API" \
             -Dsonar.organization=nour-moalla \
             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
-            -Dsonar.token=${{ secrets.SONAR_TOKEN }}
+            -Dsonar.token=${{ secrets.SONAR_TOKEN }} \
+            -Dsonar.java.binaries=target/classes
 
   # ============================================
   # GATE 4: DEPENDENCY AUDIT
