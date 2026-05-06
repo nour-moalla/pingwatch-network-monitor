@@ -190,8 +190,8 @@ jobs:
       - name: Push to Docker Hub
         if: github.ref == 'refs/heads/main'
         run: |
-          docker tag pingwatch:latest ${{ secrets.DOCKERHUB_USERNAME }}/pingwatch:${{ github.sha }}
-          docker push ${{ secrets.DOCKERHUB_USERNAME }}/pingwatch:${{ github.sha }}
+          docker tag pingwatch:latest nourmoalla/pingwatch:${{ github.sha }}
+          docker push nourmoalla/pingwatch:${{ github.sha }}
   # ============================================
   # SUMMARY
   # ============================================
