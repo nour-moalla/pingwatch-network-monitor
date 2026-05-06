@@ -184,12 +184,9 @@ jobs:
       - name: Push to Docker Hub
         if: github.ref == 'refs/heads/main'
         run: |
-          echo ${{ secrets.DOCKERHUB_TOKEN }} | \
-            docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
-          docker tag ${{ env.IMAGE_NAME }}:${{ github.sha }} \
-            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-          docker push \
-            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          echo ${{ secrets.DOCKERHUB_TOKEN }} | docker login -u ${{ secrets.DOCKERHUB_USERNAME }} --password-stdin
+          docker tag ${{ env.IMAGE_NAME }}:latest ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          docker push ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
   # ============================================
   # SUMMARY
