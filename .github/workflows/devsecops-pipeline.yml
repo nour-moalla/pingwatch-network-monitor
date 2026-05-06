@@ -91,7 +91,7 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         run: |
           mvn sonar:sonar \
-            -Dsonar.projectKey=pingwatch \
+            -Dsonar.projectKey=nour-moalla_pingwatch-network-monitor \
             -Dsonar.projectName="PingWatch API" \
             -Dsonar.organization=nour-moalla \
             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
